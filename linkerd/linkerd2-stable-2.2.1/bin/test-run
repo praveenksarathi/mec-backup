@@ -1,0 +1,71 @@
+#!/bin/bash
+
+function check_linkerd_binary(){
+    printf "Checking the linkerd binary..."
+    if [[ "$linkerd_path" != /* ]]; then
+        printf "\\n[%s] is not an absolute path\\n" "$linkerd_path"
+        exit 1
+    fi
+    if [ ! -x "$linkerd_path" ]; then
+        printf "\\n[%s] does not exist or is not executable\\n" "$linkerd_path"
+        exit 1
+    fi
+    exit_code=0
+    "$linkerd_path" version --client > /dev/null 2>&1 || exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        printf "\\nFailed to run linkerd version command\\n"
+        exit $exit_code
+    fi
+    printf "[ok]\\n"
+}
+
+function check_if_k8s_reachable(){
+    printf "Checking if there is a Kubernetes cluster available..."
+    exit_code=0
+    kubectl --request-timeout=5s get ns > /dev/null 2>&1 || exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        printf "\\nFailed to connect to Kubernetes cluster\\n"
+        exit $exit_code
+    fi
+    printf "[ok]\\n"
+}
+
+function run_test(){
+    printf "Running test [%s] %s\\n" "$(basename "$1")" "$2"
+    go test -v "$1" -linkerd "$linkerd_path" -linkerd-namespace "$linkerd_namespace" -integration-tests "$2"
+}
+
+linkerd_path=$1
+
+if [ -z "$linkerd_path" ]; then
+    echo "usage: $(basename "$0") /path/to/linkerd [namespace]" >&2
+    exit 64
+fi
+
+check_linkerd_binary
+check_if_k8s_reachable
+
+bindir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+test_directory="$bindir/../test"
+linkerd_version=$($linkerd_path version --client --short)
+linkerd_namespace=${2:-l5d-integration}
+
+printf "==================RUNNING ALL TESTS==================\\n"
+
+printf "Testing Linkerd version [%s] namespace [%s]\\n" "$linkerd_version" "$linkerd_namespace"
+
+exit_code=0
+
+run_test "$test_directory/install_test.go" || exit_code=$?
+run_test "$test_directory/install_test.go" "-enable-tls" || exit_code=$?
+for test in $(find "$test_directory" -mindepth 2 -name '*_test.go'); do
+    run_test "$test" || exit_code=$?
+done
+
+if [ $exit_code -eq 0 ]; then
+    printf "\\n=== PASS: all tests passed\\n"
+else
+    printf "\\n=== FAIL: at least one test failed\\n"
+fi
+
+exit $exit_code

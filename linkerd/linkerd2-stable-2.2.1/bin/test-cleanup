@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -eu
+
+linkerd_namespace=${1:-l5d-integration}
+
+if [ -z "$linkerd_namespace" ]; then
+    echo "usage: $(basename "$0") <namespace>" >&2
+    exit 64
+fi
+
+echo "cleaning up namespace [${linkerd_namespace}] and associated test namespaces"
+
+if ! namespaces=$(kubectl get ns -oname | grep -E "/$linkerd_namespace(-|$)"); then
+  echo "no namespaces found for [$linkerd_namespace]" >&2
+  exit 1
+else
+  kubectl delete $namespaces
+fi

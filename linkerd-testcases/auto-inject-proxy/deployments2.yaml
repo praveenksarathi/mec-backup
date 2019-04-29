@@ -1,0 +1,42 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auto-inject-explicit
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: python-app
+  namespace: auto-inject-explicit
+spec:
+  replicas: 1
+  template:
+    metadata:
+    annotations:
+    linkerd.io/inject: enabled
+      labels:
+        app: python-app
+    spec:
+      containers:
+      - name: python-app
+        image: praveenksarathi/praveen-python:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-app-svc
+  namespace: auto-inject-explicit
+  labels:
+    app: python-app
+spec:
+  type: NodePort
+  ports:
+  - port: 5000
+    nodePort: 30080
+  selector:
+    app: python-app
+---

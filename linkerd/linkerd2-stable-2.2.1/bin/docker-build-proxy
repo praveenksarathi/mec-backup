@@ -1,0 +1,19 @@
+#!/bin/bash
+
+set -eu
+
+if [ $# -ne 0 ]; then
+    echo "no arguments allowed for $(basename $0), given: $@" >&2
+    exit 64
+fi
+
+bindir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+rootdir="$( cd $bindir/.. && pwd )"
+
+. $bindir/_docker.sh
+. $bindir/_tag.sh
+
+# Default to a pinned commit SHA of the proxy.
+PROXY_VERSION="${PROXY_VERSION:-59d00f6}"
+
+docker_build proxy "$(head_root_tag)" $rootdir/Dockerfile-proxy --build-arg PROXY_VERSION=$PROXY_VERSION

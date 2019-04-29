@@ -1,0 +1,17 @@
+**/disco
+target
+tmp.discovery
+**/.idea
+**/cmake-*
+**/CMakeLists.txt
+*.iml
+vendor
+web/web
+web/app/node_modules
+web/app/dist
+web/app/yarn-error.log
+.protoc
+.gorun
+.dep*
+**.gogen*
+**/*.swp

@@ -1,0 +1,122 @@
+#!/bin/bash
+
+set -o errexit -o nounset -o pipefail
+
+ROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )"/.. && pwd )"
+
+DEV_PORT=8080
+export NODE_ENV=${NODE_ENV:=development}
+
+function -h {
+cat <<USAGE
+USAGE: web <command>
+
+  * build - build the assets
+  * dev - run a dev server (with live reloading). Options:
+      -p $DEV_PORT
+  * port-forward - setup a tunnel to a controller component and port
+      Example: port-forward controller 8085
+  * run - run a local server (sans. reloading)
+  * setup - get the environment setup for development
+      Note: any command line options are passed on to yarn
+  * test - run the tests
+      Note: any command line options are passed on to the test runner (jest)
+USAGE
+}; function --help { -h ;}
+
+function check-for-linkerd {
+  controller_pod=$(get-pod controller)
+  grafana_pod=$(get-pod grafana)
+
+  if [[ -z "${controller_pod// }" ]]; then
+    err "Controller is not running. Have you installed Linkerd?"
+    exit 1
+  fi
+
+  if [[ -z "${grafana_pod// }" ]]; then
+    err "Controller is not running. Have you installed Linkerd?"
+    exit 1
+  fi
+}
+
+function dev {
+  build
+
+  while getopts "p:" opt; do
+    case "$opt" in
+      p) DEV_PORT=$OPTARG
+    esac
+  done
+
+  check-for-linkerd && (
+    port-forward controller 8085 &
+    port-forward grafana 3000 &
+  )
+
+  cd $ROOT/web/app && yarn webpack-dev-server --port $DEV_PORT &
+  cd $ROOT/web && \
+    ../bin/go-run . $*
+}
+
+function build {
+  cd $ROOT/web/app
+  yarn webpack
+}
+
+function get-pod {
+  if [[ "$#" -ne 1 ]]; then
+    echo "usage: bin/web get-pod component-name" >&2
+    exit 1
+  fi
+
+  kubectl --namespace=linkerd get po \
+    --selector=linkerd.io/control-plane-component=$1 \
+    --field-selector='status.phase==Running' \
+    -o jsonpath='{.items[*].metadata.name}'
+}
+
+function port-forward {
+  if [[ "$#" -ne 2 ]]; then
+    echo "usage: bin/web port-forward component-name port-number" >&2
+    exit 1
+  fi
+
+  nc -z localhost "$2" || \
+    kubectl --namespace=linkerd port-forward $(get-pod $1) "$2:$2"
+}
+
+function run {
+  build
+
+  check-for-linkerd && (
+    port-forward controller 8085 &
+    port-forward grafana 3000 &
+  )
+
+  cd $ROOT/web
+  ../bin/go-run . $*
+}
+
+function setup {
+  cd $ROOT/web/app
+  yarn $*
+}
+
+function test {
+  cd $ROOT/web/app
+  yarn jest "$*"
+}
+
+function main {
+  setup
+  build
+}
+
+function msg { out "$*" >&2 ;}
+function err { local x=$? ; msg "$*" ; return $(( $x == 0 ? 1 : $x )) ;}
+function out { printf '%s\n' "$*" ;}
+
+if [[ ${1:-} ]] && declare -F | cut -d' ' -f3 | grep -Fqx -- "${1:-}"
+then "$@"
+else main "$@"
+fi

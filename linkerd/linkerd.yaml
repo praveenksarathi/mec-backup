@@ -1,0 +1,38 @@
+admin:
+  port: 9990
+
+routers:
+- protocol: http
+  label: int-http
+  dtab: |
+    /svc       => /#/io.l5d.fs;
+  servers:
+  - port: 4140
+    ip: 0.0.0.0
+
+- protocol: thrift
+  servers:
+  - port: 8081
+    ip: 0.0.0.0
+    thriftFramed: true
+  client:
+    thriftFramed: true
+  thriftMethodInDst: false
+  dtab: |
+    /svc => /#/io.l5d.fs/thrift;
+
+namers:
+- kind: io.l5d.fs
+  rootDir: disco
+
+telemetry:
+- kind: io.l5d.statsd
+  experimental: true
+  prefix: linkerd
+  hostname: 127.0.0.1
+  port: 8125
+  gaugeIntervalMs: 10000
+  sampleRate: 0.01
+- kind: io.l5d.tracelog
+  sampleRate: 0.2
+  level: TRACE
